@@ -16,7 +16,12 @@ package server
 
 import (
 	"fmt"
+	"io"
 	"sync"
+
+	frpIo "github.com/fatedier/frp/utils/io"
+	frpNet "github.com/fatedier/frp/utils/net"
+	"github.com/fatedier/frp/utils/util"
 )
 
 type ControlManager struct {
@@ -86,4 +91,73 @@ func (pm *ProxyManager) GetByName(name string) (pxy Proxy, ok bool) {
 	defer pm.mu.RUnlock()
 	pxy, ok = pm.pxys[name]
 	return
+}
+
+// Manager for visitor listeners.
+type VisitorManager struct {
+	visitorListeners map[string]*frpNet.CustomListener
+	skMap            map[string]string
+
+	mu sync.RWMutex
+}
+
+func NewVisitorManager() *VisitorManager {
+	return &VisitorManager{
+		visitorListeners: make(map[string]*frpNet.CustomListener),
+		skMap:            make(map[string]string),
+	}
+}
+
+func (vm *VisitorManager) Listen(name string, sk string) (l *frpNet.CustomListener, err error) {
+	vm.mu.Lock()
+	defer vm.mu.Unlock()
+
+	if _, ok := vm.visitorListeners[name]; ok {
+		err = fmt.Errorf("custom listener for [%s] is repeated", name)
+		return
+	}
+
+	l = frpNet.NewCustomListener()
+	vm.visitorListeners[name] = l
+	vm.skMap[name] = sk
+	return
+}
+
+func (vm *VisitorManager) NewConn(name string, conn frpNet.Conn, timestamp int64, signKey string,
+	useEncryption bool, useCompression bool) (err error) {
+
+	vm.mu.RLock()
+	defer vm.mu.RUnlock()
+
+	if l, ok := vm.visitorListeners[name]; ok {
+		var sk string
+		if sk = vm.skMap[name]; util.GetAuthKey(sk, timestamp) != signKey {
+			err = fmt.Errorf("visitor connection of [%s] auth failed", name)
+			return
+		}
+
+		var rwc io.ReadWriteCloser = conn
+		if useEncryption {
+			if rwc, err = frpIo.WithEncryption(rwc, []byte(sk)); err != nil {
+				err = fmt.Errorf("create encryption connection failed: %v", err)
+				return
+			}
+		}
+		if useCompression {
+			rwc = frpIo.WithCompression(rwc)
+		}
+		err = l.PutConn(frpNet.WrapReadWriteCloserToConn(rwc, conn))
+	} else {
+		err = fmt.Errorf("custom listener for [%s] doesn't exist", name)
+		return
+	}
+	return
+}
+
+func (vm *VisitorManager) CloseListener(name string) {
+	vm.mu.Lock()
+	defer vm.mu.Unlock()
+
+	delete(vm.visitorListeners, name)
+	delete(vm.skMap, name)
 }

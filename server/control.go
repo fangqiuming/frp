@@ -97,9 +97,10 @@ func NewControl(svr *Service, ctlConn net.Conn, loginMsg *msg.Login) *Control {
 // Start send a login success message to client and start working.
 func (ctl *Control) Start() {
 	loginRespMsg := &msg.LoginResp{
-		Version: version.Full(),
-		RunId:   ctl.runId,
-		Error:   "",
+		Version:       version.Full(),
+		RunId:         ctl.runId,
+		ServerUdpPort: config.ServerCommonCfg.BindUdpPort,
+		Error:         "",
 	}
 	msg.WriteMsg(ctl.conn, loginRespMsg)
 
@@ -378,6 +379,7 @@ func (ctl *Control) CloseProxy(closeMsg *msg.CloseProxy) (err error) {
 
 	pxy.Close()
 	ctl.svr.DelProxy(pxy.GetName())
+	delete(ctl.proxies, closeMsg.ProxyName)
 	StatsCloseProxy(pxy.GetName(), pxy.GetConf().GetBaseInfo().ProxyType)
 	return
 }

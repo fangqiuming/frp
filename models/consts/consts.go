@@ -27,4 +27,6 @@ var (
 	UdpProxy   string = "udp"
 	HttpProxy  string = "http"
 	HttpsProxy string = "https"
+	StcpProxy  string = "stcp"
+	XtcpProxy  string = "xtcp"
 )
