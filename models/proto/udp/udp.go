@@ -82,7 +82,6 @@ func Forwarder(dstAddr *net.UDPAddr, readCh <-chan *msg.UdpPacket, sendCh chan<-
 			mu.Lock()
 			delete(udpConnMap, addr)
 			mu.Unlock()
-			udpConn.Close()
 		}()
 
 		buf := pool.GetBuf(1500)

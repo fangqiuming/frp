@@ -21,7 +21,6 @@ import (
 	"io"
 	"net"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/fatedier/frp/utils/log"
@@ -179,7 +178,6 @@ func (sc *SharedConn) WriteBuff(buffer []byte) (err error) {
 type StatsConn struct {
 	Conn
 
-	closed     int64 // 1 means closed
 	totalRead  int64
 	totalWrite int64
 	statsFunc  func(totalRead, totalWrite int64)
@@ -205,12 +203,9 @@ func (statsConn *StatsConn) Write(p []byte) (n int, err error) {
 }
 
 func (statsConn *StatsConn) Close() (err error) {
-	old := atomic.SwapInt64(&statsConn.closed, 1)
-	if old != 1 {
-		err = statsConn.Conn.Close()
-		if statsConn.statsFunc != nil {
-			statsConn.statsFunc(statsConn.totalRead, statsConn.totalWrite)
-		}
+	err = statsConn.Conn.Close()
+	if statsConn.statsFunc != nil {
+		statsConn.statsFunc(statsConn.totalRead, statsConn.totalWrite)
 	}
 	return
 }
